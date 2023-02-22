@@ -29,10 +29,10 @@ class OuladDataset(DGLDataset):
         super().__init__(name='oulad')
         
     def process(self):
-        graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
-        self.graphs, label_dict = load_graphs(graph_path)
-        self.labels = label_dict['labels']
-        return
+        # graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
+        # self.graphs, label_dict = load_graphs(graph_path)
+        # self.labels = label_dict['labels']
+        # return
         
         vle, studentVle, studentRegistration, studentAssessment, studentInfo, assessments = oulad_load()
 
