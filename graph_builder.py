@@ -29,10 +29,10 @@ class OuladDataset(DGLDataset):
         super().__init__(name='oulad')
         
     def process(self):
-        # graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
-        # self.graphs, label_dict = load_graphs(graph_path)
-        # self.labels = label_dict['labels']
-        # return
+        graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
+        self.graphs, label_dict = load_graphs(graph_path)
+        self.labels = label_dict['labels']
+        return
         
         vle, studentVle, studentRegistration, studentAssessment, studentInfo, assessments = oulad_load()
 
@@ -121,7 +121,7 @@ class OuladDataset(DGLDataset):
             
             node_set = {}
             index = 0
-            for i in list(set(edges_of_id['new_date'])) + list(set(edges_of_id['id_activity'])):
+            for i in list(set(edges_of_id['id_activity'])) + list(set(edges_of_id['new_date'])):
                 node_set[i] = index
                 index += 1
 
@@ -137,7 +137,6 @@ class OuladDataset(DGLDataset):
                 src_node.append(node_id[edges_of_id['new_date'].to_numpy()[i]])
                 
             g = dgl.graph((src_node, dst_node))
-            #g = dgl.to_bidirected(g) # add
 
             # add node feature
             feature, node_type, date_node_feature, activity_node_feature, assessment_node_feature = [], [], [], [], []
@@ -163,8 +162,8 @@ class OuladDataset(DGLDataset):
             g.ndata['activity_node_feature'] = torch.tensor(activity_node_feature)
             g.ndata['assessment_node_feature'] = torch.tensor(assessment_node_feature)
 
-            g.edata['edge_feature'] = torch.tensor(list(edges_of_id['sum_click']) + list(edges_of_id['sum_click']))
-
+            g.edata['edge_feature'] = torch.FloatTensor(list(edges_of_id['sum_click']) + list(edges_of_id['sum_click']))
+            
             # edge date with date
             date_src = list(set(edges_of_id['new_date']))[:-1]
             date_dst = list(set(edges_of_id['new_date']))[1:]
@@ -172,6 +171,7 @@ class OuladDataset(DGLDataset):
                 g.add_edges(node_id[date_src[i]], node_id[date_dst[i]])
                 g.add_edges(node_id[date_dst[i]], node_id[date_src[i]])
     
+            
             
             self.graphs.append(g)
         
@@ -190,7 +190,6 @@ class OuladDataset(DGLDataset):
     def __len__(self):
         return len(self.graphs)
     
-
 
     def save(self):
         # save graphs and labels

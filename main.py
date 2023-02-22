@@ -4,7 +4,7 @@ from dgl.dataloading import GraphDataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
 from graph_builder import OuladDataset
-from preprocessing import graph_print
+from utils import graph_print
 from trainer import train
 
 

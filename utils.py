@@ -1,6 +1,7 @@
 import networkx as nx
 import dgl
 import matplotlib.pyplot as plt
+import numpy as np
 
 def graph_print(dataset):
     index = 0
@@ -43,3 +44,6 @@ def graph_print(dataset):
         plt.savefig('./images/oulad' + title + '.png')
         index += 1
         
+def save_loss(loss_record, num_epochs, model, lr, num_layers):
+    plt.plot(np.arange(num_epochs), loss_record)
+    plt.savefig('./images/' + model + '_loss' + '_epoch_' + num_epochs + '_layers_' + num_layers + '_lr_' + lr + '.png')

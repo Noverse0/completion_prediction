@@ -1,14 +1,15 @@
 from tqdm import tqdm
 import torch
 import torch.nn as nn
-from torch.optim import Adam
+from torch.optim import Adam, SGD
 from model import GCN
-
-
-
+from utils import save_loss
+from sklearn.metrics import classification_report, roc_auc_score
 
 def train(args, train_dataloader, test_dataloader):
     device = torch.device("cuda:0" if args.gpu >= 0 and torch.cuda.is_available() else "cpu")
+    if device != torch.device("cpu"):
+        print('gpu is working')
     torch.cuda.empty_cache()
     if args.model == 'GCN':
         input_dim = list(
@@ -16,11 +17,16 @@ def train(args, train_dataloader, test_dataloader):
         output_dim = args.num_classes
         model = GCN(args.num_layers, input_dim,
                     args.hidden_dim, output_dim, device).to(device)
-        
+
     ########### TODO other model define #############
 
-    loss_func = nn.CrossEntropyLoss()  # define loss function
+    loss_func = nn.MSELoss()  # define loss function
+    #loss_func = nn.BCELoss()
     optimizer = Adam(model.parameters(), lr=args.lr)
+    #optimizer = SGD(model.parameters(), lr=args.lr)
+    
+    train_loss = 0
+    loss_record = []
 
     print("start")
     for epoch in range(args.num_epochs):
@@ -33,39 +39,40 @@ def train(args, train_dataloader, test_dataloader):
 
             optimizer.zero_grad()
             loss = loss_func(prediction, label)
+            
             loss.backward()
-
+            train_loss += loss.item()
+            
             optimizer.step()
+            
+        train_loss = train_loss / len(train_dataloader.dataset)
         print('Epoch{}, train_loss {:.4f}'.format(
-                epoch, loss))
+                epoch, train_loss))
+        loss_record.append(train_loss)
+
+    save_loss(loss_record, args.num_epochs, args.model, args.lr, args.num_layers)
 
     ######### eval ############
-    tn, tp, fn, fp = 0, 0, 0, 0
+    labels = []
+    pred_value = []
+    
     model.eval()
     for graph, label in test_dataloader:
         graph = graph.to(device)
         label = label.type(torch.FloatTensor).to(device)
                     
         prediction = model(graph)
-        pred_result = prediction.argmax(1)
+        pred_result = prediction.argmax()
         
-        if int(label[0][0]) == 1: # pass 일때
-            if pred_result == label[0][0]: # 맞춤
-                tp += 1
-            else: 
-                fn += 1
-        else:
-            if pred_result == label[0][0]:
-                tn += 1
-            else:
-                fp += 1
+        labels.append(label.argmax())
+        pred_value.append(pred_result)
+        
+        #print(prediction, pred_result)
+        
+    print(classification_report(labels, pred_value))
 
-    precision = tp/(tp+fp)
-    recall = tp/(tp+fn)
-    f1 = 2/((1/precision)+(1/recall))
-    accuracy = (tn + tp) / (tn + tp + fn + fp)
+    roc_score = roc_auc_score(labels, pred_value)
     
-    print('accuracy {:.4f}, f1 score {:.4f}, precision {:.4f}, recall {:.4f}'.format(
-        accuracy, f1, precision, recall))
-            
+    print('auc {:.4f}'.format(
+        roc_score))
             
