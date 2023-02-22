@@ -162,17 +162,19 @@ class OuladDataset(DGLDataset):
             g.ndata['activity_node_feature'] = torch.tensor(activity_node_feature)
             g.ndata['assessment_node_feature'] = torch.tensor(assessment_node_feature)
 
-            g.edata['edge_feature'] = torch.FloatTensor(list(edges_of_id['sum_click']) + list(edges_of_id['sum_click']))
             
             # edge date with date
             date_src = list(set(edges_of_id['new_date']))[:-1]
             date_dst = list(set(edges_of_id['new_date']))[1:]
+            
             for i in range(len(date_src)):
                 g.add_edges(node_id[date_src[i]], node_id[date_dst[i]])
                 g.add_edges(node_id[date_dst[i]], node_id[date_src[i]])
-    
+
+            date_edge_feature = torch.FloatTensor([1 for i in range(len(list(set(edges_of_id['new_date']))[1:]))])
+            g.edata['edge_feature'] = torch.FloatTensor(list(edges_of_id['sum_click']) + list(edges_of_id['sum_click']) + [1 for i in range(len(list(set(edges_of_id['new_date']))[1:]))] + [1 for i in range(len(list(set(edges_of_id['new_date']))[1:]))])
             
-            
+            #print(g.edata['edge_feature'])
             self.graphs.append(g)
         
             if label_dict[graph_name] == 'Completion':

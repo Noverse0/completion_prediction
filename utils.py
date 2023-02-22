@@ -46,4 +46,4 @@ def graph_print(dataset):
         
 def save_loss(loss_record, num_epochs, model, lr, num_layers):
     plt.plot(np.arange(num_epochs), loss_record)
-    plt.savefig('./images/' + model + '_loss' + '_epoch_' + num_epochs + '_layers_' + num_layers + '_lr_' + lr + '.png')
+    plt.savefig('./images/' + model + '_loss_' + '_epoch_' + str(num_epochs) + '_layers_' + str(num_layers) + '_lr_' + str(lr) + '.png')
