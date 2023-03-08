@@ -92,6 +92,7 @@ class OuladDataset(DGLDataset):
         activity = pd.merge(activity, graph_group['date'], how='left', on='graph_name')
         activity['new_date'] = activity['date'] - activity['min']
         activity = activity[activity['new_date'] < self.days]
+        #activity = activity[activity['date'] < self.days]
         
         # make date one-hot
         date_onehot_list = list(range(0, self.days, 1))
@@ -127,7 +128,7 @@ class OuladDataset(DGLDataset):
 
             node_id = {node : index for index, node in enumerate(node_set)}
 
-            src_node, dst_node, edge_feature = [], [], []
+            src_node, dst_node = [], []
             for i in range(len(edges_of_id)):
                 src_node.append(node_id[edges_of_id['id_activity'].to_numpy()[i]])
                 dst_node.append(node_id[edges_of_id['new_date'].to_numpy()[i]])
@@ -206,6 +207,49 @@ class OuladDataset(DGLDataset):
         graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
         self.graphs, label_dict = load_graphs(graph_path)
         self.labels = label_dict['labels']
+        #info_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph_info.pkl')
+        #self.num_classes = load_info(info_path)['num_classes']
+        
+        
+class OuladDatasedt(DGLDataset):
+    def __init__(self, days):
+        self.days = days
+        super().__init__(name='oulad')
+        
+    def process(self):
+        # graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
+        # self.graphs, label_dict = load_graphs(graph_path)
+        # self.labels = label_dict['labels']
+        # return
+        
+        vle, studentVle, studentRegistration, studentAssessment, studentInfo, assessments = oulad_load()
+
+        # pass and distinction = Completion, fail and withdrawn = Dropout
+        studentInfo['completion_status'] = list(map(lambda x: 'Completion' if (x == 'Pass') or (x == 'Distinction') else 'Dropout', studentInfo['final_result']))
+        studentInfo['graph_name'] = studentInfo['code_module'] + '_' + studentInfo['code_presentation'] + '_' + studentInfo['id_student'].astype(str)
+    
+    
+    
+
+    def __getitem__(self, i):
+        return self.graphs
+
+    def __len__(self):
+        return len(self.graphs)
+    
+
+    def save(self):
+        # save graphs and labels
+        graph_path = os.path.join('data/archive', 'oulad_mainmodel_gcn_graph.bin')
+        save_graphs(graph_path, self.graphs)
+        # save other information in python dict
+        #info_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph_info.pkl')
+        #save_info(info_path, {'num_classes': self.num_classes})
+
+    def load(self):
+        # load processed data from directory `self.save_path`
+        graph_path = os.path.join('data/archive', 'oulad_mainmodel_gcn_graph.bin')
+        self.graphs = load_graphs(graph_path)
         #info_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph_info.pkl')
         #self.num_classes = load_info(info_path)['num_classes']
         
