@@ -3,10 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl
 import torch
+import dgl.function as fn
+from dgl.nn import SAGEConv
 
 class MLP(nn.Module):
     """Construct two-layer MLP-type aggreator for GIN model"""
-
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
         self.linears = nn.ModuleList()
@@ -36,7 +37,7 @@ class GCN(nn.Module):
             nn.init.xavier_uniform_(self.convlayers[-1].weight)
         #self.conv_out = GraphConv(h_feats, num_classes)
         
-        self.mlp = MLP(h_feats, 8, num_classes)
+        #self.mlp = MLP(h_feats, 8, num_classes)
         #nn.init.xavier_uniform_(self.mlp.weight)
         
 
@@ -62,6 +63,39 @@ class GCN(nn.Module):
         # date_node = g.ndata['node_type'].tolist().count([0,0,1])
         # return h[date_node]
         
-        date_node = g.ndata['node_type'].tolist().count([0,0,1])
-        h = self.mlp(h[-date_node:].sum(dim=0)/date_node)
+        #date_node = g.ndata['node_type'].tolist().count([0,0,1])
+        #h = self.mlp(h[-date_node:].sum(dim=0)/date_node)
         return h
+    
+    
+    
+    
+# ----------- 2. create model -------------- #
+# build a two-layer GraphSAGE model
+class GraphSAGE(nn.Module):
+    def __init__(self, in_feats, h_feats):
+        super(GraphSAGE, self).__init__()
+        self.conv1 = SAGEConv(in_feats, h_feats, 'mean')
+        self.conv2 = SAGEConv(h_feats, h_feats, 'mean')
+
+    def forward(self, g, in_feat):
+        h = self.conv1(g, in_feat)
+        h = F.relu(h)
+        h = self.conv2(g, h)
+        return h
+
+class MLPPredictor(nn.Module):
+    def __init__(self, h_feats):
+        super().__init__()
+        self.W1 = nn.Linear(h_feats * 2, h_feats)
+        self.W2 = nn.Linear(h_feats, 1)
+        
+    def apply_edges(self, edges):
+        h = torch.cat([edges.src['h'], edges.dst['h']], 1)
+        return {'score': self.W2(F.relu(self.W1(h))).squeeze(1)}
+        
+    def forward(self, g, h):
+        with g.local_scope():
+            g.ndata['h'] = h
+            g.apply_edges(self.apply_edges)
+            return g.edata['score']

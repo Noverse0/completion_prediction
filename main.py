@@ -1,9 +1,10 @@
 import argparse
 import torch as th
+import numpy as np
 from dgl.dataloading import GraphDataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from graph_builder import OuladDataset
+from graph_builder import OuladDataset, Oulad_main_Dataset
 from utils import graph_print
 from trainer import train
 
@@ -15,31 +16,31 @@ def main(args):
         # dataset = NaverDataset(arg.days)
     # OULAD
     elif args.dataset == 'oulad':
-        dataset = OuladDataset(args.days)
+        #g, course_student = Oulad_main_Dataset(args.days, args.split_ratio)
         if args.print:
-            graph_print(dataset)
+            graph_print(g)
             return
     else:
         raise ValueError()
         
-    # cuda test
-    use_cuda = args.gpu >= 0 and th.cuda.is_available()
-    if use_cuda:
-        th.cuda.manual_seed_all(0)
-        th.cuda.set_device(args.gpu)
-        
-    num_examples = len(dataset)
-    num_train = int(num_examples * args.split_ratio)
+    # num_examples = len(dataset)
+    # num_train = int(num_examples * args.split_ratio)
 
-    train_sampler = SubsetRandomSampler(th.arange(num_train))
-    test_sampler = SubsetRandomSampler(th.arange(num_train, num_examples))
+    # train_sampler = SubsetRandomSampler(th.arange(num_train))
+    # test_sampler = SubsetRandomSampler(th.arange(num_train, num_examples))
 
-    train_dataloader = GraphDataLoader(
-        dataset, sampler=train_sampler, drop_last=False)
-    test_dataloader = GraphDataLoader(
-        dataset, sampler=test_sampler, drop_last=False)
+    # train_dataloader = GraphDataLoader(
+    #     dataset, sampler=train_sampler, drop_last=False)
+    # test_dataloader = GraphDataLoader(
+    #     dataset, sampler=test_sampler, drop_last=False)
     
-    train(args, train_dataloader, test_dataloader)
+    # train(args, train_dataloader, test_dataloader)
+    
+    #train_dataloader = GraphDataLoader(g)
+    
+    #train(args, train_dataloader, course_student)
+    
+    
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
