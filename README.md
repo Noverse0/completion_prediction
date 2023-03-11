@@ -2,10 +2,11 @@
 
 ### 작업목록
 
-click_sum을 edge feature로 이용한 gcn baseline model 구현 완료 -> gcn으로 명칭
+oulad dataset을 이용하여 GCN을 이용하여 mainmodel 만듬
 
 [todo]  
-우리 Model 구현중
+우리 Model mooc dataset으로
+Window를 만들어 Dropout predcition으로 다시 문제정의
 
 ### About
 
@@ -30,24 +31,23 @@ Please set the data like the path below.
 
 Naver: completion_prediction/data/NAVER_Connect_Edwith_Dataset_v2.0/~  
 OULAD: completion_prediction/data/archive/~
+Mooc:
 
 Download  
 Naver: ~  
 OULAD: https://www.kaggle.com/datasets/anlgrbz/student-demographics-online-education-dataoulad?select=vle.csv
+Mooc: http://moocdata.cn/data/user-activity
 
 ### Run
 
-If you go to the dockerfile, you can freely edit the commands in the CMD column.
-
-docker build method
+docker build & run method
 
 ```
-docker build --tag completion_prediction .
-docker run -p 8080:800 completion_prediction
+make up
 ```
 
 CMD Example
 
 ```
-python3 main.py -d [data name oulad or ]
+python main.py -d oulad --gpu 0 --num_layer 2 --threshold 0.4 --num_epochs 50 --lr 0.01
 ```

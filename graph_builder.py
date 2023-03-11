@@ -7,246 +7,7 @@ from tqdm import tqdm
 import os
 from dgl import save_graphs, load_graphs
 from sklearn.model_selection import train_test_split
-
-# learning_sequence에 이미 들어 있는 activity를 제외하고 다음 activity를 추가함
-def add_learning_sequence(num_next_learning, learning_sequence):
-    for i in range(len(num_next_learning)):
-        if num_next_learning[i][0] in learning_sequence:
-            pass
-        else:
-            learning_sequence.append(num_next_learning[i][0])
-            break
-    return learning_sequence, num_next_learning[i][0]
-
-# list에 있는 activity들의 개수를 count함
-def count_activity(first_learning):
-    num_activity = {}
-    for activity in list(set(first_learning)):
-        num_activity[activity] = first_learning.count(activity)
-    num_activity = sorted(num_activity.items(),reverse=True, key=lambda x:x[1])
-    return num_activity
-
-# next_learning이라는 리스트에 우리의 target_activity 다음에 오는 activity들을 추가함
-def find_next_learning(student_list, target_activity, student_learning):
-    next_learning = []
-    for student in student_list:
-        first_activity_index = [i for i in range(len(student_learning[student])) if target_activity == student_learning[student][i]]
-        for index in first_activity_index:
-            if index+1 >= len(student_learning[student]):
-                pass
-            else:
-                next_learning.append(student_learning[student][index+1])
-    return next_learning
-
-# MultiIndex 컬럼을 평탄화 하는 함수
-def flat_cols(df):
-    df.columns = [' / '.join(x) for x in df.columns.to_flat_index()]
-    return df
-
-def oulad_load():
-    courses = pd.read_csv('data/archive/courses.csv')
-    vle = pd.read_csv('data/archive/vle.csv')
-    studentVle = pd.read_csv('data/archive/studentVle.csv')
-    studentRegistration = pd.read_csv('data/archive/studentRegistration.csv')
-    studentAssessment = pd.read_csv('data/archive/studentAssessment.csv')
-    studentInfo = pd.read_csv('data/archive/studentInfo.csv')
-    assessments = pd.read_csv('data/archive/assessments.csv')
-    
-    return courses, vle, studentVle, studentRegistration, studentAssessment, studentInfo, assessments
-
-def one_hot_encoding(n, n_to_index):
-    one_hot_vector = [0]*(len(n_to_index))
-    index = n_to_index[n]
-    one_hot_vector[index] = 1
-    return one_hot_vector
-
-class OuladDataset(DGLDataset):
-    def __init__(self, days):
-        self.days = days
-        super().__init__(name='oulad')
-        
-    def process(self):
-        # graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
-        # self.graphs, label_dict = load_graphs(graph_path)
-        # self.labels = label_dict['labels']
-        # return
-        
-        courses, vle, studentVle, studentRegistration, studentAssessment, studentInfo, assessments = oulad_load()
-
-        # pass and distinction = Completion, fail and withdrawn = Dropout
-        studentInfo['completion_status'] = list(map(lambda x: 'Completion' if (x == 'Pass') or (x == 'Distinction') else 'Dropout', studentInfo['final_result']))
-        studentInfo['graph_name'] = studentInfo['code_module'] + '_' + studentInfo['code_presentation'] + '_' + studentInfo['id_student'].astype(str)
-    
-        # make graph name module_presentation_userid
-        studentAssessment = pd.merge(studentAssessment, assessments, how='left', on='id_assessment')
-        studentAssessment['graph_name'] = studentAssessment['code_module'] + '_' + studentAssessment['code_presentation'] + '_' + studentAssessment['id_student'].astype(str)
-        studentVle['graph_name'] = studentVle['code_module'] + '_' + studentVle['code_presentation'] + '_' + studentVle['id_student'].astype(str)
-        studentAssessment['assessment_date'] = studentAssessment['id_assessment'].astype(str) + '_' + studentAssessment['date'].astype(str)
-   
-        # calculate assessment click_sum
-        assessment_group = studentAssessment.groupby(['graph_name', 'assessment_date']).nunique()
-        assessment_group.rename(columns = {'id_assessment' : 'sum_click'}, inplace = True)
-        studentAssessment = pd.merge(studentAssessment, assessment_group['sum_click'], how='left', on=['graph_name','assessment_date'])
-
-        # node type activity = 0, assessment = 1
-        studentVle['activity'], studentVle['assessment'] = 0, 1
-        studentAssessment['activity'], studentAssessment['assessment'] = 1, 0
-        studentVle.rename(columns = {'id_site' : 'id_activity'}, inplace = True)
-        studentAssessment.rename(columns = {'id_assessment' : 'id_activity'}, inplace = True)
-
-        # make one-hot vector using activity_type, assessment_type
-        activity_onehot_list = list(vle['activity_type'].unique())
-        assessment_onehot_list = list(studentAssessment['assessment_type'].unique())
-        
-        activity_zero_list = [0 for i in range(len(activity_onehot_list))]
-        assessment_zero_list = [0 for i in range(len(assessment_onehot_list))]
-        
-        activity_to_index = {n : index for index, n in enumerate(activity_onehot_list)}
-        assessment_to_index = {n : index for index, n in enumerate(assessment_onehot_list)}
-        
-        # activity one-hot
-        activity_node_feature, assessment_node_feature = [], []
-        studentVle = pd.merge(studentVle, vle[['id_site', 'activity_type']], left_on='id_activity', right_on='id_site')
-        for index, activity_type in enumerate(studentVle['activity_type']):
-            activity_node_feature.append(one_hot_encoding(activity_type, activity_to_index))
-            assessment_node_feature.append(assessment_zero_list)
-        studentVle['activity_node_feature'] = activity_node_feature
-        studentVle['assessment_node_feature'] = assessment_node_feature
-        
-        # assessment one-hot
-        activity_node_feature, assessment_node_feature = [], []
-        for index, assessment_type in enumerate(studentAssessment['assessment_type']):
-            activity_node_feature.append(activity_zero_list)
-            assessment_node_feature.append(one_hot_encoding(assessment_type, assessment_to_index))
-        studentAssessment['activity_node_feature'] = activity_node_feature
-        studentAssessment['assessment_node_feature'] = assessment_node_feature
-        
-        activity = pd.concat([studentVle[['graph_name', 'date', 'sum_click', 'activity', 'assessment', 'id_activity', 'activity_node_feature', 'assessment_node_feature']], 
-                              studentAssessment[['graph_name', 'date', 'sum_click', 'activity', 'assessment', 'id_activity', 'activity_node_feature', 'assessment_node_feature']]])
-
-        # Leave only n days after first interaction
-        graph_group = activity.groupby('graph_name').agg(['min'])
-        activity = pd.merge(activity, graph_group['date'], how='left', on='graph_name')
-        activity['new_date'] = activity['date'] - activity['min']
-        activity = activity[activity['new_date'] < self.days]
-        #activity = activity[activity['date'] < self.days]
-        
-        # make date one-hot
-        date_onehot_list = list(range(0, self.days, 1))
-        date_to_index = {n : index for index, n in enumerate(date_onehot_list)}
-        date_node_feature = []
-        for index, date_type in enumerate(activity['new_date']):
-            date_node_feature.append(one_hot_encoding(date_type, date_to_index))
-        activity['date_node_feature'] = date_node_feature
-        
-        
-        ##---------------make a graph-----------------------##
-        self.graphs = []
-        self.labels = []
-        
-        # Create a graph for each graph ID from the edges table
-        label_dict = {}
-        for _, row in studentInfo.iterrows():
-            label_dict[row['graph_name']] = row['completion_status']
-
-        # For the edges, first group the table by graph IDs.
-        edges_group = activity.groupby('graph_name')
-
-        # For each graph ID...
-        for graph_name in tqdm(edges_group.groups):
-            # Find the edges as well as the number of nodes and its label.
-            edges_of_id = edges_group.get_group(graph_name)
-            
-            node_set = {}
-            index = 0
-            for i in list(set(edges_of_id['id_activity'])) + list(set(edges_of_id['new_date'])):
-                node_set[i] = index
-                index += 1
-
-            node_id = {node : index for index, node in enumerate(node_set)}
-
-            src_node, dst_node = [], []
-            for i in range(len(edges_of_id)):
-                src_node.append(node_id[edges_of_id['id_activity'].to_numpy()[i]])
-                dst_node.append(node_id[edges_of_id['new_date'].to_numpy()[i]])
-
-            for i in range(len(edges_of_id)):
-                dst_node.append(node_id[edges_of_id['id_activity'].to_numpy()[i]])
-                src_node.append(node_id[edges_of_id['new_date'].to_numpy()[i]])
-                
-            g = dgl.graph((src_node, dst_node))
-
-            # add node feature
-            feature, node_type, date_node_feature, activity_node_feature, assessment_node_feature = [], [], [], [], []
-            for node in list(node_id.keys()):
-                if node < self.days: # date node
-                    date_node_feature.append(edges_of_id['date_node_feature'].to_numpy()[[np.where(edges_of_id['new_date'].to_numpy() == node)[0][0]]][0])
-                    activity_node_feature.append(activity_zero_list)
-                    assessment_node_feature.append(assessment_zero_list)
-                    node_type.append([0,0,1])
-                else:
-                    date_node_feature.append([0 for i in range(self.days)])
-                    activity_node_feature.append(edges_of_id['activity_node_feature'].to_numpy()[[np.where(edges_of_id['id_activity'].to_numpy() == node)[0][0]]][0])
-                    assessment_node_feature.append(edges_of_id['assessment_node_feature'].to_numpy()[[np.where(edges_of_id['id_activity'].to_numpy() == node)[0][0]]][0])
-                    if edges_of_id['assessment_node_feature'].to_numpy()[[np.where(edges_of_id['id_activity'].to_numpy() == node)[0][0]]][0] == [0,0,0]:
-                        node_type.append([1,0,0]) # it is activity feature
-                    else:
-                        node_type.append([0,1,0])
-                feature.append(node_type[-1] + activity_node_feature[-1] + assessment_node_feature[-1] + date_node_feature[-1])
-
-            g.ndata['feature'] = torch.tensor(feature)
-            g.ndata['node_type'] = torch.tensor(node_type)
-            g.ndata['date_node_feature'] = torch.tensor(date_node_feature)
-            g.ndata['activity_node_feature'] = torch.tensor(activity_node_feature)
-            g.ndata['assessment_node_feature'] = torch.tensor(assessment_node_feature)
-
-            
-            # edge date with date
-            date_src = list(set(edges_of_id['new_date']))[:-1]
-            date_dst = list(set(edges_of_id['new_date']))[1:]
-            
-            for i in range(len(date_src)):
-                g.add_edges(node_id[date_src[i]], node_id[date_dst[i]])
-                g.add_edges(node_id[date_dst[i]], node_id[date_src[i]])
-
-            date_edge_feature = torch.FloatTensor([1 for i in range(len(list(set(edges_of_id['new_date']))[1:]))])
-            g.edata['edge_feature'] = torch.FloatTensor(list(edges_of_id['sum_click']) + list(edges_of_id['sum_click']) + [1 for i in range(len(list(set(edges_of_id['new_date']))[1:]))] + [1 for i in range(len(list(set(edges_of_id['new_date']))[1:]))])
-            
-            #print(g.edata['edge_feature'])
-            self.graphs.append(g)
-        
-            if label_dict[graph_name] == 'Completion':
-                self.labels.append([1,0])
-            else:
-                self.labels.append([0,1])
-            
-            
-        # Convert the label list to tensor for saving.
-        self.labels = torch.LongTensor(self.labels)
-
-    def __getitem__(self, i):
-        return self.graphs[i], self.labels[i]
-
-    def __len__(self):
-        return len(self.graphs)
-    
-
-    def save(self):
-        # save graphs and labels
-        graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
-        save_graphs(graph_path, self.graphs, {'labels': self.labels})
-        # save other information in python dict
-        #info_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph_info.pkl')
-        #save_info(info_path, {'num_classes': self.num_classes})
-
-    def load(self):
-        # load processed data from directory `self.save_path`
-        graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
-        self.graphs, label_dict = load_graphs(graph_path)
-        self.labels = label_dict['labels']
-        #info_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph_info.pkl')
-        #self.num_classes = load_info(info_path)['num_classes']
-        
+from utils import oulad_load, one_hot_encoding, flat_cols, find_next_learning, count_activity, add_learning_sequence
         
 class Oulad_main_Dataset(DGLDataset):
     def __init__(self, days, split_ratio):
@@ -255,9 +16,8 @@ class Oulad_main_Dataset(DGLDataset):
         super().__init__(name='oulad')
         
     def process(self):
-        # graph_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph.bin')
-        # self.graphs, label_dict = load_graphs(graph_path)
-        # self.labels = label_dict['labels']
+        # graph_path = os.path.join('data/oulad', 'Oulad_main_Dataset_graph.bin')
+        # self.graphs = load_graphs(graph_path)
         # return
         
         courses, vle, studentVle, studentRegistration, studentAssessment, studentInfo, assessments = oulad_load()
@@ -420,8 +180,8 @@ class Oulad_main_Dataset(DGLDataset):
                 neg_src_list.append(node_set[i])
                 neg_dst_list.append(node_set[course])
             
-            train_pos_src, test_pos_src, train_pos_dst, test_pos_dst = train_test_split(pos_src_list, pos_dst_list, test_size=0.2, train_size=0.8, random_state=32)
-            train_neg_src, test_neg_src, train_neg_dst, test_neg_dst = train_test_split(neg_src_list, neg_dst_list, test_size=0.2, train_size=0.8, random_state=32)
+            train_pos_src, test_pos_src, train_pos_dst, test_pos_dst = train_test_split(pos_src_list, pos_dst_list, test_size=1-self.split_ratio, train_size=self.split_ratio, random_state=32)
+            train_neg_src, test_neg_src, train_neg_dst, test_neg_dst = train_test_split(neg_src_list, neg_dst_list, test_size=1-self.split_ratio, train_size=self.split_ratio, random_state=32)
 
             train_pos['src'] = train_pos['src'] + train_pos_src
             train_pos['dst'] = train_pos['dst'] + train_pos_dst
@@ -438,14 +198,15 @@ class Oulad_main_Dataset(DGLDataset):
         test_pos_g = dgl.graph((test_pos['src'], test_pos['dst']), num_nodes=num_node)
         test_neg_g = dgl.graph((test_neg['src'], test_neg['dst']), num_nodes=num_node)
 
-        self.graphs = g
-        self.train_pos_g = train_pos_g
-        self.train_neg_g = train_neg_g
-        self.test_pos_g = test_pos_g
-        self.test_neg_g = test_neg_g
+        self.graphs = []
+        self.graphs.append(g)
+        self.graphs.append(train_pos_g)
+        self.graphs.append(train_neg_g)
+        self.graphs.append(test_pos_g)
+        self.graphs.append(test_neg_g)
 
-    def __getitem__(self):
-        return self.graphs, self.train_pos_g, self.train_neg_g, self.test_pos_g, self.test_neg_g
+    def __getitem__(self, i):
+        return self.graphs[i]
 
     def __len__(self):
         return len(self.graphs)
@@ -453,7 +214,7 @@ class Oulad_main_Dataset(DGLDataset):
 
     def save(self):
         # save graphs and labels
-        graph_path = os.path.join('data/archive', 'Oulad_main_Dataset_graph.bin')
+        graph_path = os.path.join('data/oulad', 'Oulad_main_Dataset_graph.bin')
         save_graphs(graph_path, self.graphs)
         # save other information in python dict
         #info_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph_info.pkl')
@@ -461,7 +222,7 @@ class Oulad_main_Dataset(DGLDataset):
 
     def load(self):
         # load processed data from directory `self.save_path`
-        graph_path = os.path.join('data/archive', 'Oulad_main_Dataset_graph.bin')
+        graph_path = os.path.join('data/oulad', 'Oulad_main_Dataset_graph.bin')
         self.graphs = load_graphs(graph_path)
         #info_path = os.path.join('data/archive', 'oulad_baseline_gcn_graph_info.pkl')
         #self.num_classes = load_info(info_path)['num_classes']

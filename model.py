@@ -21,7 +21,7 @@ class MLP(nn.Module):
         return self.linears[1](h)
     
 class GCN(nn.Module):
-    def __init__(self, num_layers, in_feats, h_feats, num_classes, device):
+    def __init__(self, num_layers, in_feats, h_feats, device):
         super(GCN, self).__init__()
         self.convlayers = nn.ModuleList()
         for layer in range(num_layers):
@@ -49,22 +49,6 @@ class GCN(nn.Module):
             h = layer(g, h, edge_weight=e)
             h = F.relu(h)
             
-        # h = self.conv_out(g, h, edge_weight=e)
-        # g.ndata["h"] = h
-        # return dgl.mean_nodes(g, "h")
-    
-        
-        #last_node = g.num_nodes() - 1  # index of last node
-        #date_node = g.ndata['node_type'].tolist().count([0,0,1])
-        #h = self.mlp(h[last_node])
-        #return h
-    
-        # h = self.conv_out(g, h, edge_weight=e)
-        # date_node = g.ndata['node_type'].tolist().count([0,0,1])
-        # return h[date_node]
-        
-        #date_node = g.ndata['node_type'].tolist().count([0,0,1])
-        #h = self.mlp(h[-date_node:].sum(dim=0)/date_node)
         return h
     
     

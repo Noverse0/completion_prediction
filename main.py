@@ -6,7 +6,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from graph_builder import OuladDataset, Oulad_main_Dataset
 from utils import graph_print
-from trainer import train
+from trainer import graph_linkprediction_train
 
 
 def main(args):
@@ -16,30 +16,15 @@ def main(args):
         # dataset = NaverDataset(arg.days)
     # OULAD
     elif args.dataset == 'oulad':
-        #g, course_student = Oulad_main_Dataset(args.days, args.split_ratio)
+        dataset = Oulad_main_Dataset(args.days, args.split_ratio)
         if args.print:
             graph_print(g)
             return
     else:
         raise ValueError()
         
-    # num_examples = len(dataset)
-    # num_train = int(num_examples * args.split_ratio)
-
-    # train_sampler = SubsetRandomSampler(th.arange(num_train))
-    # test_sampler = SubsetRandomSampler(th.arange(num_train, num_examples))
-
-    # train_dataloader = GraphDataLoader(
-    #     dataset, sampler=train_sampler, drop_last=False)
-    # test_dataloader = GraphDataLoader(
-    #     dataset, sampler=test_sampler, drop_last=False)
-    
-    # train(args, train_dataloader, test_dataloader)
-    
-    #train_dataloader = GraphDataLoader(g)
-    
-    #train(args, train_dataloader, course_student)
-    
+    dataloader = GraphDataLoader(dataset)
+    graph_linkprediction_train(args, dataloader)
     
     
 if __name__ == "__main__":
@@ -54,9 +39,9 @@ if __name__ == "__main__":
     parser.add_argument("--split_ratio", type=float, default=0.8, help="default train ratio is 0.8")
     parser.add_argument("--model", type=str, default='GCN', help="default Model is GCN")
     parser.add_argument("--print", type=bool, default=False, help="graph print option")
-    parser.add_argument(
-        "--num_layers", type=int, default=2, help="number of propagation rounds"
-    )
+    parser.add_argument("--num_layers", type=int, default=2, help="number of propagation rounds")
+    parser.add_argument("--threshold", type=float, default=0.5, help="classification threshold")
+
     parser.add_argument(
         "-e",
         "--num_epochs",
