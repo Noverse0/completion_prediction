@@ -1,6 +1,0 @@
-data/
-.ipynb_checkpoints/
-__pycache__/
-make_oulad_graph.ipynb
-oulad_gcn.py
-.gitignore
