@@ -30,8 +30,8 @@ Data is too large to upload.
 Please set the data like the path below.
 
 Naver: completion_prediction/data/NAVER_Connect_Edwith_Dataset_v2.0/~  
-OULAD: completion_prediction/data/archive/~
-Mooc:
+OULAD: completion_prediction/data/oulad/~
+Mooc: completion_prediction/data/mooc/~
 
 Download  
 Naver: ~  
