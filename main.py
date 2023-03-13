@@ -4,10 +4,12 @@ import numpy as np
 from dgl.dataloading import GraphDataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-from graph_builder import OuladDataset, Oulad_main_Dataset
+from graph_builder import Oulad_Dataset
 from utils import graph_print
 from trainer import graph_linkprediction_train
 
+import os
+from dgl import load_graphs
 
 def main(args):
     # Naver
@@ -16,7 +18,9 @@ def main(args):
         # dataset = NaverDataset(arg.days)
     # OULAD
     elif args.dataset == 'oulad':
-        dataset = Oulad_main_Dataset(args.days, args.split_ratio)
+        dataset = Oulad_Dataset(args.days, args.split_ratio)
+        # graph_path = os.path.join('data/oulad', 'Oulad_main_Dataset_graph.bin')
+        # dataset = load_graphs(graph_path)
         if args.print:
             graph_print(g)
             return
@@ -41,18 +45,8 @@ if __name__ == "__main__":
     parser.add_argument("--print", type=bool, default=False, help="graph print option")
     parser.add_argument("--num_layers", type=int, default=2, help="number of propagation rounds")
     parser.add_argument("--threshold", type=float, default=0.5, help="classification threshold")
+    parser.add_argument("-e","--num_epochs", type=int, default=50, help="number of training epochs")
 
-    parser.add_argument(
-        "-e",
-        "--num_epochs",
-        type=int,
-        default=50,
-        help="number of training epochs",
-    )
-    
-    parser.add_argument(
-        "--model_path", type=str, default=None, help="path for save the model"
-    )
     fp = parser.add_mutually_exclusive_group(required=False)
     fp.add_argument("--validation", dest="validation", action="store_true")
     fp.add_argument("--testing", dest="validation", action="store_false")

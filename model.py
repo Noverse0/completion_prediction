@@ -46,7 +46,8 @@ class GCN(nn.Module):
         e = g.edata['edge_feature']
     
         for i, layer in enumerate(self.convlayers):
-            h = layer(g, h, edge_weight=e)
+            # h = layer(g, h, edge_weight=e)
+            h = layer(g, h)
             h = F.relu(h)
             
         return h

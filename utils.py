@@ -2,6 +2,8 @@ import networkx as nx
 import dgl
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import os
 
 def graph_print(dataset):
     index = 0
@@ -96,7 +98,7 @@ def oulad_load():
     courses = pd.read_csv(os.path.join(path, 'courses.csv'))
     vle = pd.read_csv(os.path.join(path, 'vle.csv'))
     studentVle = pd.read_csv(os.path.join(path, 'studentVle.csv'))
-    coursstudentRegistrationes = pd.read_csv(os.path.join(path, 'studentRegistration.csv'))
+    studentRegistration = pd.read_csv(os.path.join(path, 'studentRegistration.csv'))
     studentAssessment = pd.read_csv(os.path.join(path, 'studentAssessment.csv'))
     studentInfo = pd.read_csv(os.path.join(path, 'studentInfo.csv'))
     assessments = pd.read_csv(os.path.join(path, 'assessments.csv'))

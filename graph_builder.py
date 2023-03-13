@@ -9,7 +9,7 @@ from dgl import save_graphs, load_graphs
 from sklearn.model_selection import train_test_split
 from utils import oulad_load, one_hot_encoding, flat_cols, find_next_learning, count_activity, add_learning_sequence
         
-class Oulad_main_Dataset(DGLDataset):
+class Oulad_Dataset(DGLDataset):
     def __init__(self, days, split_ratio):
         self.days = days
         self.split_ratio = split_ratio
@@ -26,6 +26,7 @@ class Oulad_main_Dataset(DGLDataset):
         studentInfo['completion_status'] = list(map(lambda x: 1 if (x == 'Pass') or (x == 'Distinction') else 0, studentInfo['final_result']))
         studentInfo['course_name'] = studentInfo['code_module'] + '_' + studentInfo['code_presentation']
         vle['course_name'] = vle['code_module'] + '_' + vle['code_presentation']
+        assessments['course_name'] = assessments['code_module'] + '_' + assessments['code_presentation']
         studentVle['course_name'] = studentVle['code_module'] + '_' + studentVle['code_presentation']
         studentVle['graph_name'] = studentVle['code_module'] + '_' + studentVle['code_presentation'] + '_' + studentVle['id_student'].astype(str)
 
@@ -33,12 +34,19 @@ class Oulad_main_Dataset(DGLDataset):
         student_first_date = studentVle[['graph_name', 'date']].groupby('graph_name').agg(['min']).pipe(flat_cols)
         studentVle = pd.merge(studentVle, student_first_date, how='left', on='graph_name')
         studentVle['new_date'] = studentVle['date'] - studentVle['date / min']
-
+        studentVle = studentVle[studentVle['new_date'] < self.days]
+        
+        studentAssessment = pd.merge(studentAssessment, assessments, how='left', on='id_assessment')
+        studentAssessment['graph_name'] = studentAssessment['code_module'] + '_' + studentAssessment['code_presentation'] + '_' + studentAssessment['id_student'].astype(str)
+        studentAssessment = pd.merge(studentAssessment, student_first_date, how='left', on='graph_name')
+        studentAssessment['new_date'] = studentAssessment['date'] - studentAssessment['date / min']
+        studentAssessment = studentAssessment[studentAssessment['new_date'] < self.days]
+        
+        
+        #----------------------Cousre Squence 만들기-------------------
         course_learning_sequence = {}
         learning_sequence = []
-
-        studentVle = studentVle[studentVle['new_date'] < self.days]
-
+        
         for course in tqdm(list(set(vle['course_name']))):
             target_course = studentVle[studentVle['course_name'] == course]
 
@@ -69,39 +77,53 @@ class Oulad_main_Dataset(DGLDataset):
             
             course_learning_sequence[course] = learning_sequence
             
-        # Graph build 순서
-        # course node 만들기 -> activity node 만들기 -> activity node와 course node 사이에 edge 생성
-        # activity node 사이에 edge만들기
-        # student node만들기 -> activity node와 edge 생성 -> course node와 edge 생성
-        studentVle = studentVle[studentVle['date'] >= 0]
+        #-----------------Graph building--------------------
         group_studentvle = studentVle.groupby(['id_student', 'id_site']).sum().reset_index()
+        group_studentassessment = studentAssessment.groupby(['id_student', 'id_assessment']).last().reset_index()
 
         node_set = {}
         index = 0
-        course_node = list(set(vle['course_name']))
-        activity_node = list(set(vle['id_site']))
-        student_node = list(set(studentInfo['id_student']))
-        for i in course_node + activity_node + student_node:
+        course_node = list(set(studentVle['course_name']))
+        activity_node = list(set(studentVle['id_site']))
+        assessment_node = list(set(studentAssessment['id_assessment']))
+        student_node = list(set(studentVle['id_student']))
+        for i in course_node + activity_node + assessment_node + student_node:
             node_set[i] = index
             index += 1
             
+        studentVle = studentVle.reset_index(drop=True)
+        studentAssessment = studentAssessment.reset_index(drop=True)
+        group_studentvle = group_studentvle.reset_index(drop=True)
+        group_studentassessment = group_studentassessment.reset_index(drop=True)
+        studentInfo = studentInfo.reset_index(drop=True)
+
         edge_feature = []
-        # course node, activity node 만들기 -> activity node와 course node 사이에 edge 생성 가중치 1
         src_node, dst_node = [], []
-        for i in range(len(vle)):
-            #src_node.append(node_set[vle['course_name'].to_numpy()[i]])
-            #dst_node.append(node_set[vle['id_site'].to_numpy()[i]])
-            src_node.append(node_set[vle['course_name'][i]])
-            dst_node.append(node_set[vle['id_site'][i]])
+
+        # Course Node와 Activity Node 만들기
+        for i in range(len(studentVle)):
+            src_node.append(node_set[studentVle['course_name'][i]])
+            dst_node.append(node_set[studentVle['id_site'][i]])
             edge_feature.append(1)
             
+        # Course Node와 Assessment Node 만들기
+        for i in range(len(studentAssessment)):
+            src_node.append(node_set[studentAssessment['course_name'][i]])
+            dst_node.append(node_set[studentAssessment['id_assessment'][i]])
+            edge_feature.append(1)
             
-        # student node만들기 -> activity node와 edge 생성 click_sum z-score
+        # student node와 Activity Node 만들기
         for i in range(len(group_studentvle)):
             src_node.append(node_set[group_studentvle['id_student'][i]])
             dst_node.append(node_set[group_studentvle['id_site'][i]])
             edge_feature.append(group_studentvle['sum_click'][i])
-            #edge_feature.append(group_studentvle[(group_studentvle['id_student'] == studentVle['id_student'][i]) & (group_studentvle['id_site'] == studentVle['id_site'][i])]['sum_click'].values[0])
+            
+        # student node와 Assessment Node 만들기
+        for i in range(len(group_studentassessment)):
+            src_node.append(node_set[group_studentassessment['id_student'][i]])
+            dst_node.append(node_set[group_studentassessment['id_assessment'][i]])
+            #edge_feature.append(group_studentassessment['score'][i])
+            edge_feature.append(1)
             
         # course node와 edge 생성 completion한 사람만 edge 생성 가중치 1
         for i in range(len(studentInfo)):
@@ -127,16 +149,23 @@ class Oulad_main_Dataset(DGLDataset):
 
         # make one-hot vector using activity_type
         activity_onehot_list = list(vle['activity_type'].unique())
+        assessment_onehot_list = list(assessments['assessment_type'].unique())
         activity_zero_list = [0 for i in range(len(activity_onehot_list))]
+        assessment_zero_list = [0 for i in range(len(assessment_onehot_list))]
         activity_to_index = {n : index for index, n in enumerate(activity_onehot_list)}
-        activity_type = []
+        assessment_to_index = {n : index for index, n in enumerate(assessment_onehot_list)}
+        activity_type, assessment_type = [], []
         for activity_id in activity_node:
             activity_type.append(vle[vle['id_site'] == activity_id]['activity_type'].values[0])
+        for assessment_id in assessment_node:
+            assessment_type.append(assessments[assessments['id_assessment'] == assessment_id]['assessment_type'].values[0])
             
         # activity one-hot
-        activity_node_feature = []
+        activity_node_feature, assessment_node_feature = [], []
         for activity_type in activity_type:
             activity_node_feature.append(one_hot_encoding(activity_type, activity_to_index))
+        for assessment_type in assessment_type:
+            assessment_node_feature.append(one_hot_encoding(assessment_type, assessment_to_index))
             
         # date one-hot
         date_feature = []
@@ -149,13 +178,16 @@ class Oulad_main_Dataset(DGLDataset):
         base_date_feature = [0]*self.days
 
         for i in range(len(course_node)):
-            node_feature.append([0,0,0] + activity_zero_list + base_date_feature)
+            node_feature.append([0,0,0] + activity_zero_list + assessment_zero_list + base_date_feature)
 
         for i in range(len(activity_node)):
-            node_feature.append([1,0,0] + activity_node_feature[i] + base_date_feature)
+            node_feature.append([1,0,0] + activity_node_feature[i] + assessment_zero_list + base_date_feature)
+            
+        for i in range(len(assessment_node)):
+            node_feature.append([0,1,0] + activity_zero_list + assessment_node_feature[i] + base_date_feature)
             
         for i in range(len(student_node)):
-            node_feature.append([0,1,0] + activity_zero_list + date_feature[i])
+            node_feature.append([0,0,1] + activity_zero_list + assessment_zero_list + date_feature[i])
             
         g.ndata['feature'] = torch.FloatTensor(node_feature)
         
@@ -164,6 +196,7 @@ class Oulad_main_Dataset(DGLDataset):
         course_student = {}
         pos_student = studentInfo[studentInfo['completion_status'] == 1] # Completion 15385
         neg_student = studentInfo[studentInfo['completion_status'] == 0] # Dropout 17208
+
         train_pos, train_neg, test_pos, test_neg = {'src':[], 'dst':[]}, {'src':[], 'dst':[]}, {'src':[], 'dst':[]}, {'src':[], 'dst':[]}
         for course in course_node:
             pos_src_list = []
@@ -173,12 +206,14 @@ class Oulad_main_Dataset(DGLDataset):
             neg_dst_list = []
             
             for i in pos_student[pos_student['course_name'] == course]['id_student'].tolist():
-                pos_src_list.append(node_set[i])
-                pos_dst_list.append(node_set[course])
+                if i in list(node_set.keys()):
+                    pos_src_list.append(node_set[i])
+                    pos_dst_list.append(node_set[course])
                 
             for i in neg_student[neg_student['course_name'] == course]['id_student'].tolist():
-                neg_src_list.append(node_set[i])
-                neg_dst_list.append(node_set[course])
+                if i in list(node_set.keys()):
+                    neg_src_list.append(node_set[i])
+                    neg_dst_list.append(node_set[course])
             
             train_pos_src, test_pos_src, train_pos_dst, test_pos_dst = train_test_split(pos_src_list, pos_dst_list, test_size=1-self.split_ratio, train_size=self.split_ratio, random_state=32)
             train_neg_src, test_neg_src, train_neg_dst, test_neg_dst = train_test_split(neg_src_list, neg_dst_list, test_size=1-self.split_ratio, train_size=self.split_ratio, random_state=32)
@@ -192,7 +227,7 @@ class Oulad_main_Dataset(DGLDataset):
             test_neg['src'] = test_neg['src'] + test_neg_src
             test_neg['dst'] = test_neg['dst'] + test_neg_dst
             
-        num_node = len(course_node + activity_node + student_node)
+        num_node = len(course_node + activity_node + assessment_node + student_node)
         train_pos_g = dgl.graph((train_pos['src'], train_pos['dst']), num_nodes=num_node)
         train_neg_g = dgl.graph((train_neg['src'], train_neg['dst']), num_nodes=num_node)
         test_pos_g = dgl.graph((test_pos['src'], test_pos['dst']), num_nodes=num_node)
